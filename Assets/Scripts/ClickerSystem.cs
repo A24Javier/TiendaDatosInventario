@@ -51,6 +51,8 @@ public class ClickerSystem : MonoBehaviour
         _canvasGroup.alpha = 0f;
         _canvasGroup.interactable = false;
         _canvasGroup.blocksRaycasts = false;
+
+        SaveCoins();
     }
 
     public void OpenClicker()

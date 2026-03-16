@@ -4,7 +4,7 @@ using System.Data;
 using System.Collections.Generic;
 using System.IO;
 using Unity.Jobs;
-using static UnityEditor.Progress;
+using System;
 
 public class DatabaseConnection : MonoBehaviour
 {
@@ -219,122 +219,149 @@ public class DatabaseConnection : MonoBehaviour
     public void AddObject(int idObjeto, int cantidad)
     {
         _dbConnection.Open();
+        var transaction = _dbConnection.BeginTransaction();
 
-        var command = _dbConnection.CreateCommand();
-
-        // Stack limit
-        command.CommandText =
-            "SELECT stack_limit FROM objeto WHERE id_obj = " + idObjeto + ";";
-        int stackLimit = System.Convert.ToInt32(command.ExecuteScalar());
-
-        int idInventario = UserData.Instance.IdInv;
-
-        int restante = cantidad;
-
-        while (restante > 0)
+        try
         {
-            int idSlot = -1;
-            int cantidadActual = 0;
+            var command = _dbConnection.CreateCommand();
 
-            // Buscar stack no lleno
-            command.CommandText = $@"
-            SELECT id_slot, cantidad FROM inventario_objeto
-            WHERE id_inv = {idInventario}
-            AND id_obj = {idObjeto}
-            AND cantidad < {stackLimit}
-            LIMIT 1;";
+            // Stack limit
+            command.CommandText =
+                "SELECT stack_limit FROM objeto WHERE id_obj = " + idObjeto + ";";
+            int stackLimit = System.Convert.ToInt32(command.ExecuteScalar());
 
-            IDataReader reader = command.ExecuteReader();
-            if (reader.Read())
+            int idInventario = UserData.Instance.IdInv;
+
+            int restante = cantidad;
+
+            while (restante > 0)
             {
-                idSlot = reader.GetInt32(0);
-                cantidadActual = reader.GetInt32(1);
-            }
-            reader.Close();
+                int idSlot = -1;
+                int cantidadActual = 0;
 
-            if (idSlot != -1)
-            {
-                int espacio = stackLimit - cantidadActual;
-                int aMeter = Mathf.Min(espacio, restante);
-
+                // Buscar stack no lleno
                 command.CommandText = $@"
-                UPDATE inventario_objeto
-                SET cantidad = cantidad + {aMeter}
-                WHERE id_slot = {idSlot};";
+                SELECT id_slot, cantidad FROM inventario_objeto
+                WHERE id_inv = {idInventario}
+                AND id_obj = {idObjeto}
+                AND cantidad < {stackLimit}
+                LIMIT 1;";
 
-                command.ExecuteNonQuery();
-                restante -= aMeter;
+                IDataReader reader = command.ExecuteReader();
+                if (reader.Read())
+                {
+                    idSlot = reader.GetInt32(0);
+                    cantidadActual = reader.GetInt32(1);
+                }
+                reader.Close();
+
+                if (idSlot != -1)
+                {
+                    int espacio = stackLimit - cantidadActual;
+                    int aMeter = Mathf.Min(espacio, restante);
+
+                    command.CommandText = $@"
+                    UPDATE inventario_objeto
+                    SET cantidad = cantidad + {aMeter}
+                    WHERE id_slot = {idSlot};";
+
+                    command.ExecuteNonQuery();
+                    restante -= aMeter;
+                }
+                else
+                {
+                    int aCrear = Mathf.Min(stackLimit, restante);
+
+                    command.CommandText =
+                        $"INSERT INTO inventario_objeto (id_inv, id_obj, cantidad) " +
+                        $"VALUES ({idInventario}, {idObjeto}, {aCrear});";
+
+                    command.ExecuteNonQuery();
+                    restante -= aCrear;
+                }
             }
-            else
-            {
-                int aCrear = Mathf.Min(stackLimit, restante);
 
-                command.CommandText =
-                    $"INSERT INTO inventario_objeto (id_inv, id_obj, cantidad) " +
-                    $"VALUES ({idInventario}, {idObjeto}, {aCrear});";
-
-                command.ExecuteNonQuery();
-                restante -= aCrear;
-            }
+            transaction.Commit();
         }
-
-        _dbConnection.Close();
+        catch (Exception ex)
+        {
+            transaction.Rollback();
+            Debug.LogError("Transacción fallida: " + ex.Message);
+        }
+        finally
+        {
+            _dbConnection.Close();
+        }
     }
 
     public void RemoveObject(int idObjeto)
     {
         _dbConnection.Open();
-        var command = _dbConnection.CreateCommand();
+        var transaction = _dbConnection.BeginTransaction();
 
-        int idInventario = UserData.Instance.IdInv;
-
-        // Buscar el último slot del objeto
-        command.CommandText = $@"
-        SELECT id_slot, cantidad
-        FROM inventario_objeto
-        WHERE id_inv = {idInventario}
-        AND id_obj = {idObjeto}
-        ORDER BY id_slot DESC
-        LIMIT 1;
-        ";
-
-        IDataReader reader = command.ExecuteReader();
-
-        int slotId = -1;
-        int cantidadActual = 0;
-
-        if (reader.Read())
+        try
         {
-            slotId = reader.GetInt32(0);
-            cantidadActual = reader.GetInt32(1);
+            var command = _dbConnection.CreateCommand();
+
+            int idInventario = UserData.Instance.IdInv;
+
+            // Buscar el último slot del objeto
+            command.CommandText = $@"
+            SELECT id_slot, cantidad
+            FROM inventario_objeto
+            WHERE id_inv = {idInventario}
+            AND id_obj = {idObjeto}
+            ORDER BY id_slot DESC
+            LIMIT 1;
+            ";
+
+            IDataReader reader = command.ExecuteReader();
+
+            int slotId = -1;
+            int cantidadActual = 0;
+
+            if (reader.Read())
+            {
+                slotId = reader.GetInt32(0);
+                cantidadActual = reader.GetInt32(1);
+            }
+
+            reader.Close();
+
+            if (slotId != -1)
+            {
+                if (cantidadActual > 1)
+                {
+                    // Restar 1
+                    command.CommandText = $@"
+                    UPDATE inventario_objeto
+                    SET cantidad = cantidad - 1
+                    WHERE id_slot = {slotId};
+                    ";
+                    command.ExecuteNonQuery();
+                }
+                else
+                {
+                    // Si solo queda 1 -> eliminar slot
+                    command.CommandText = $@"
+                    DELETE FROM inventario_objeto
+                    WHERE id_slot = {slotId};
+                    ";
+                    command.ExecuteNonQuery();
+                }
+            }
+
+            transaction.Commit();
         }
-
-        reader.Close();
-
-        if (slotId != -1)
+        catch(Exception ex)
         {
-            if (cantidadActual > 1)
-            {
-                // Restar 1
-                command.CommandText = $@"
-                UPDATE inventario_objeto
-                SET cantidad = cantidad - 1
-                WHERE id_slot = {slotId};
-                ";
-                command.ExecuteNonQuery();
-            }
-            else
-            {
-                // Si solo queda 1 -> eliminar slot
-                command.CommandText = $@"
-                DELETE FROM inventario_objeto
-                WHERE id_slot = {slotId};
-                ";
-                command.ExecuteNonQuery();
-            }
+            Debug.LogError("Transacción fallida: " + ex.Message);
+            transaction.Rollback();
         }
-
-        _dbConnection.Close();
+        finally
+        {
+            _dbConnection.Close();
+        }
     }
 
 
@@ -474,24 +501,37 @@ public class DatabaseConnection : MonoBehaviour
 
         var command = _dbConnection.CreateCommand();
         _dbConnection.Open();
+        var transaction = _dbConnection.BeginTransaction();
 
-        command.CommandText = $@"
-        SELECT coins
-        FROM inventario
-        WHERE id_inv = {inventoryId}";
-
-        IDataReader reader = command.ExecuteReader();
-
-        while (reader.Read())
+        try
         {
-            coins = reader.GetInt32(0);
+            command.CommandText = $@"
+            SELECT coins
+            FROM inventario
+            WHERE id_inv = {inventoryId}";
+
+            IDataReader reader = command.ExecuteReader();
+
+            while (reader.Read())
+            {
+                coins = reader.GetInt32(0);
+            }
+
+            reader.Close();
+
+            command.ExecuteNonQuery();
+
+            transaction.Commit();
         }
-
-        reader.Close();
-
-        command.ExecuteNonQuery();
-
-        _dbConnection.Close();
+        catch (Exception ex)
+        {
+            Debug.LogError("Transacción fallida: " + ex.Message);
+            transaction.Rollback();
+        }
+        finally
+        {
+            _dbConnection.Close();
+        }
 
         return coins;
     }
@@ -499,44 +539,70 @@ public class DatabaseConnection : MonoBehaviour
     public void SaveCoins(int coins)
     {
         _dbConnection.Open();
+        var transaction = _dbConnection.BeginTransaction();
 
         int idInv = UserData.Instance.IdInv;
 
-        var command = _dbConnection.CreateCommand();
-        command.CommandText = $@"
-        UPDATE inventario
-        SET coins = {coins}
-        WHERE id_inv = {idInv}";
+        try
+        {
+            var command = _dbConnection.CreateCommand();
 
-        command.ExecuteNonQuery();
+            command.CommandText = $@"
+            UPDATE inventario
+            SET coins = {coins}
+            WHERE id_inv = {idInv}";
 
-        _dbConnection.Close();
+            command.ExecuteNonQuery();
+
+            transaction.Commit();
+        }
+        catch(Exception ex)
+        {
+            transaction.Rollback();
+            Debug.LogError("Transacción: " + ex.Message);
+        }
+        finally
+        {
+            _dbConnection.Close();
+        }
     }
 
     public int GetItemPrice(string itemName)
     {
-        int price = 0;
-
-        var command = _dbConnection.CreateCommand();
         _dbConnection.Open();
 
-        command.CommandText = $@"
-        SELECT precio
-        FROM objeto
-        WHERE nombre = '{itemName}'";
+        var transaction = _dbConnection.BeginTransaction();
+        int price = 0;
 
-        IDataReader reader = command.ExecuteReader();
-
-        while (reader.Read())
+        try
         {
-            price = reader.GetInt32(0);
+            var command = _dbConnection.CreateCommand();
+
+            command.CommandText = $@"
+            SELECT precio
+            FROM objeto
+            WHERE nombre = '{itemName}'";
+
+            IDataReader reader = command.ExecuteReader();
+
+            while (reader.Read())
+            {
+                price = reader.GetInt32(0);
+            }
+
+            reader.Close();
+
+            transaction.Commit();
         }
-
-        reader.Close();
-
-        command.ExecuteNonQuery();
-
-        _dbConnection.Close();
+        catch (Exception ex)
+        {
+            transaction.Rollback();
+            Debug.LogError("Transacción: " + ex.Message);
+        }
+        finally
+        {
+            _dbConnection.Close();
+        }
 
         return price;
     }
