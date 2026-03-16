@@ -536,7 +536,7 @@ public class DatabaseConnection : MonoBehaviour
         return coins;
     }
 
-    public void SaveCoins(int coins)
+    public void SaveCoins(int coins, bool doRollback)
     {
         _dbConnection.Open();
         var transaction = _dbConnection.BeginTransaction();
@@ -553,6 +553,11 @@ public class DatabaseConnection : MonoBehaviour
             WHERE id_inv = {idInv}";
 
             command.ExecuteNonQuery();
+
+            if (doRollback)
+            {
+                throw new Exception("Probando Rollback");
+            }
 
             transaction.Commit();
         }

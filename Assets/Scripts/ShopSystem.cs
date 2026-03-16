@@ -10,6 +10,7 @@ public class ItemsShop
     public string ObjectName;
     public TMP_Text PriceText;
     public Button BuyButton;
+    public Button SellButton;
 }
 
 public class ShopSystem : MonoBehaviour
@@ -36,8 +37,21 @@ public class ShopSystem : MonoBehaviour
                     {
                         playerCoins -= price;
                         ClickerSystem.Instance.UpdateTextActualCoins(playerCoins);
-                        DatabaseConnection.Instance.SaveCoins(playerCoins);
+                        DatabaseConnection.Instance.SaveCoins(playerCoins, false);
                         DatabaseConnection.Instance.AddApple();
+                    }
+                });
+
+                item.SellButton.onClick.AddListener(delegate
+                {
+                    int playerCoins = DatabaseConnection.Instance.GetCoins();
+
+                    if (InventoryManager.Instance.HasObject(1))
+                    {
+                        playerCoins += price;
+                        ClickerSystem.Instance.UpdateTextActualCoins(playerCoins);
+                        DatabaseConnection.Instance.SaveCoins(playerCoins, false);
+                        DatabaseConnection.Instance.RemoveApple();
                     }
                 });
             }
@@ -51,8 +65,21 @@ public class ShopSystem : MonoBehaviour
                     {
                         playerCoins -= price;
                         ClickerSystem.Instance.UpdateTextActualCoins(playerCoins);
-                        DatabaseConnection.Instance.SaveCoins(playerCoins);
+                        DatabaseConnection.Instance.SaveCoins(playerCoins, false);
                         DatabaseConnection.Instance.AddGold();
+                    }
+                });
+
+                item.SellButton.onClick.AddListener(delegate
+                {
+                    int playerCoins = DatabaseConnection.Instance.GetCoins();
+
+                    if (InventoryManager.Instance.HasObject(2))
+                    {
+                        playerCoins += price;
+                        ClickerSystem.Instance.UpdateTextActualCoins(playerCoins);
+                        DatabaseConnection.Instance.SaveCoins(playerCoins, false);
+                        DatabaseConnection.Instance.RemoveGold();
                     }
                 });
             }
@@ -66,8 +93,21 @@ public class ShopSystem : MonoBehaviour
                     {
                         playerCoins -= price;
                         ClickerSystem.Instance.UpdateTextActualCoins(playerCoins);
-                        DatabaseConnection.Instance.SaveCoins(playerCoins);
+                        DatabaseConnection.Instance.SaveCoins(playerCoins, false);
                         DatabaseConnection.Instance.AddPotion();
+                    }
+                });
+
+                item.SellButton.onClick.AddListener(delegate
+                {
+                    int playerCoins = DatabaseConnection.Instance.GetCoins();
+
+                    if (InventoryManager.Instance.HasObject(3))
+                    {
+                        playerCoins += price;
+                        ClickerSystem.Instance.UpdateTextActualCoins(playerCoins);
+                        DatabaseConnection.Instance.SaveCoins(playerCoins, false);
+                        DatabaseConnection.Instance.RemovePotion();
                     }
                 });
             }

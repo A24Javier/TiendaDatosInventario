@@ -43,7 +43,12 @@ public class ClickerSystem : MonoBehaviour
 
     public void SaveCoins()
     {
-        DatabaseConnection.Instance.SaveCoins(_actualCoins);
+        DatabaseConnection.Instance.SaveCoins(_actualCoins, false);
+    }
+
+    public void SaveCoinsRollback()
+    {
+        DatabaseConnection.Instance.SaveCoins(_actualCoins, true);
     }
 
     public void CloseClicker()

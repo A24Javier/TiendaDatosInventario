@@ -99,4 +99,19 @@ public class InventoryManager : MonoBehaviour
             slotGO.SetActive(true);
         }
     }
+
+    public bool HasObject(int objectId)
+    {
+        SlotItem[] slotItems = DatabaseConnection.Instance.GetItems();
+
+        for(int i = 0; i < slotItems.Length; i++)
+        {
+            if (slotItems[i].ItemId == objectId && slotItems[i].Cantity > 0)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 }
